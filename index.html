@@ -1,245 +1,414 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>100 Levels of Escalating Rage</title>
-    <style>
-        body {
-            margin: 0;
-            background: #09090e;
-            color: white;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            overflow: hidden;
-        }
-        h1 { margin: 5px; color: #ff0055; font-size: 28px; text-shadow: 0 0 10px #ff0055; }
-        #status { font-size: 18px; margin-bottom: 12px; font-weight: bold; letter-spacing: 1px; }
-        #modifier-alert { color: #ffcc00; font-weight: bold; margin-bottom: 8px; height: 20px; text-shadow: 0 0 5px #ffcc00; }
-        #canvas-container { position: relative; }
-        canvas { background: #13131a; border: 4px solid #ff0055; box-shadow: 0 0 25px rgba(255, 0, 85, 0.4); border-radius: 8px; }
-    </style>
+<title>Weel Cot AI</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+    margin:0;
+    font-family:Arial;
+    background:#0b0f19;
+    color:white;
+    display:flex;
+    height:100vh;
+}
+
+.sidebar{
+    width:260px;
+    background:#0f1424;
+    border-right:1px solid #1c2338;
+    padding:10px;
+    overflow-y:auto;
+}
+
+.topbar{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:10px;
+}
+
+.logo{
+    width:40px;
+    height:40px;
+    border-radius:50%;
+    background:radial-gradient(circle,#10a37f,#1f2a44);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:18px;
+}
+
+.newchat{
+    width:100%;
+    padding:10px;
+    background:#10a37f;
+    border:none;
+    border-radius:8px;
+    color:white;
+    cursor:pointer;
+    margin:10px 0;
+}
+
+.chat-item{
+    background:#1a2236;
+    padding:10px;
+    border-radius:8px;
+    margin:6px 0;
+    cursor:pointer;
+}
+
+.main{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+}
+
+.header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:12px;
+    background:#0f1424;
+    border-bottom:1px solid #1c2338;
+}
+
+.chat{
+    flex:1;
+    padding:15px;
+    overflow-y:auto;
+}
+
+.msg{
+    padding:10px;
+    margin:8px 0;
+    border-radius:10px;
+    max-width:75%;
+    white-space:pre-wrap;
+}
+
+.user{
+    background:#10a37f;
+    margin-left:auto;
+}
+
+.bot{
+    background:#1f2a44;
+}
+
+.inputbar{
+    display:flex;
+    padding:10px;
+    background:#0f1424;
+}
+
+input{
+    flex:1;
+    padding:12px;
+    border:none;
+    border-radius:8px;
+    outline:none;
+    background:#1a2236;
+    color:white;
+}
+
+button{
+    padding:12px;
+    margin-left:8px;
+    border:none;
+    border-radius:8px;
+    background:#10a37f;
+    color:white;
+    cursor:pointer;
+}
+
+select{
+    background:#1a2236;
+    color:white;
+    border:none;
+    padding:8px;
+    border-radius:8px;
+}
+</style>
 </head>
+
 <body>
 
-    <h1>The Escalating Rage Obby</h1>
-    <div id="modifier-alert">Level Modifier: Normal Physics</div>
-    <div id="status">Level: <span id="level-count">1</span>/100 | Deaths: <span id="death-count">0</span></div>
-    <div id="canvas-container">
-        <canvas id="gameCanvas" width="800" height="400"></canvas>
+<div class="sidebar">
+
+    <div class="topbar">
+        <div class="logo">👑</div>
+        <b>Weel Cot AI</b>
     </div>
 
+    <button class="newchat" onclick="newChat()">+ New Chat</button>
+
+    <div id="chatList"></div>
+
+</div>
+
+<div class="main">
+
+<div class="header">
+
+    <span id="title">Chat</span>
+
+    <select id="modeSelect" onchange="changeMode()">
+        <option value="home">🏠 Home Mode</option>
+        <option value="school">📚 School Mode</option>
+    </select>
+
+</div>
+
+<div class="chat" id="chat"></div>
+
+<div class="inputbar">
+<input id="input" placeholder="Ask anything..." />
+<button onclick="send()">Send</button>
+</div>
+
+</div>
+
 <script>
-const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
-const levelCountUI = document.getElementById("level-count");
-const deathCountUI = document.getElementById("death-count");
-const alertUI = document.getElementById("modifier-alert");
 
-let currentLevel = 1;
-let deaths = 0;
-let mapObjects = [];
-let particles = [];
+const API_KEY = "PASTE_YOUR_OPENROUTER_KEY";
 
-function seededRandom(seed) {
-    const x = Math.sin(seed++) * 10000;
-    return x - Math.floor(x);
+let currentMode = "home";
+
+function changeMode(){
+    currentMode =
+    document.getElementById("modeSelect").value;
 }
 
-// Better Player Configuration (Smooth physics, visuals, and trail)
-const player = {
-    x: 40, y: 300, radius: 11,
-    vx: 0, vy: 0,
-    speed: 4.5, jumpForce: 11.5,
-    grounded: false,
-    trail: [],
-    stretchX: 1, stretchY: 1
-};
+let chats =
+JSON.parse(localStorage.getItem("chats") || "[]");
 
-const keys = { Left: false, Right: false, Up: false };
-window.addEventListener("keydown", (e) => handleKey(e, true));
-window.addEventListener("keyup", (e) => handleKey(e, false));
+let current = 0;
 
-function handleKey(e, isDown) {
-    if (e.code === "ArrowLeft" || e.code === "KeyA") keys.Left = isDown;
-    if (e.code === "ArrowRight" || e.code === "KeyD") keys.Right = isDown;
-    if (e.code === "ArrowUp" || e.code === "KeyW" || e.code === "Space") keys.Up = isDown;
+if(chats.length === 0){
+    newChat();
+}else{
+    renderChats();
+    renderChat();
 }
 
-// Difficulty Scaling Engine (Triggers every 10 levels)
-function getLevelModifier(level) {
-    if (level <= 10) return { name: "Normal Physics", trapChance: 0.3, iceChance: 0.1, gravity: 0.5, speedDebuff: false, inverted: false };
-    if (level <= 20) return { name: "⚠️ Trap Frenzy (More hidden hazards)", trapChance: 0.6, iceChance: 0.2, gravity: 0.5, speedDebuff: false, inverted: false };
-    if (level <= 30) return { name: "🧊 Ice World (Super slippery)", trapChance: 0.4, iceChance: 0.7, gravity: 0.5, speedDebuff: false, inverted: false };
-    if (level <= 40) return { name: "🪐 High Gravity (Heavy jumps)", trapChance: 0.4, iceChance: 0.2, gravity: 0.75, speedDebuff: false, inverted: false };
-    if (level <= 50) return { name: "⛓️ Heavy Ankles (Slower movement)", trapChance: 0.5, iceChance: 0.2, gravity: 0.5, speedDebuff: true, inverted: false };
-    if (level <= 60) return { name: "🌀 Left is Right (Inverted Controls!)", trapChance: 0.5, iceChance: 0.2, gravity: 0.5, speedDebuff: false, inverted: true };
-    if (level <= 70) return { name: "🛑 Blind Jumps (Fewer safe blocks)", trapChance: 0.7, iceChance: 0.4, gravity: 0.5, speedDebuff: false, inverted: false };
-    if (level <= 80) return { name: "💥 Chaos Mode (Heavy Gravity + Slippery)", trapChance: 0.6, iceChance: 0.6, gravity: 0.7, speedDebuff: false, inverted: false };
-    if (level <= 90) return { name: "🧠 Psychological Warfare (Inverted + Fast Traps)", trapChance: 0.8, iceChance: 0.3, gravity: 0.5, speedDebuff: false, inverted: true };
-    return { name: "💀 IMPOSSIBLE RAGE (Maximum Penalty)", trapChance: 0.9, iceChance: 0.5, gravity: 0.75, speedDebuff: true, inverted: true };
+function save(){
+    localStorage.setItem(
+        "chats",
+        JSON.stringify(chats)
+    );
 }
 
-function generateLevel(levelNum) {
-    const objects = [];
-    let seed = levelNum * 7431;
-    const mod = getLevelModifier(levelNum);
-    alertUI.textContent = `Level Modifier: ${mod.name}`;
+function newChat(){
 
-    objects.push({ x: 0, y: 350, w: 100, h: 50, type: 'solid' }); // Spawn
-    objects.push({ x: 0, y: 395, w: 800, h: 5, type: 'spike' });  // Lava
+    chats.push({
+        name:"Chat "+(chats.length+1),
+        msgs:[]
+    });
 
-    let currentX = 140;
-    while (currentX < 670) {
-        let platformWidth = 50 + Math.floor(seededRandom(seed++) * 35);
-        let platformY = 210 + Math.floor(seededRandom(seed++) * 110);
-        
-        // If blind mode active, platforms are significantly smaller
-        if (levelNum > 60 && levelNum <= 70) platformWidth -= 15;
+    current = chats.length-1;
 
-        let typeRand = seededRandom(seed++);
-        let type = 'solid';
-        if (typeRand > 0.75) type = 'fake';
-        else if (typeRand > (1 - mod.iceChance)) type = 'ice';
+    save();
 
-        objects.push({ x: currentX, y: platformY, w: platformWidth, h: 20, type: type, visible: true });
+    renderChats();
+    renderChat();
+}
 
-        // Hidden traps calculation
-        if (seededRandom(seed++) < mod.trapChance) {
-            const spikeX = currentX + Math.floor(seededRandom(seed++) * (platformWidth - 14));
-            objects.push({ x: spikeX, y: platformY - 22, w: 14, h: 22, type: 'trap', triggered: false });
+function renderChats(){
+
+    let box =
+    document.getElementById("chatList");
+
+    box.innerHTML="";
+
+    chats.forEach((c,i)=>{
+
+        let div =
+        document.createElement("div");
+
+        div.className="chat-item";
+
+        div.innerText=c.name;
+
+        div.onclick=()=>{
+            current=i;
+            renderChat();
+        };
+
+        box.appendChild(div);
+
+    });
+
+}
+
+function renderChat(){
+
+    document.getElementById("title")
+    .innerText =
+    chats[current].name;
+
+    let box =
+    document.getElementById("chat");
+
+    box.innerHTML="";
+
+    chats[current].msgs.forEach(m=>{
+
+        let div =
+        document.createElement("div");
+
+        div.className =
+        "msg "+m.type;
+
+        div.innerText=m.text;
+
+        box.appendChild(div);
+
+    });
+
+}
+
+function add(text,type){
+
+    chats[current].msgs.push({
+        text,
+        type
+    });
+
+    save();
+
+    renderChat();
+}
+
+async function ai(text){
+
+    try{
+
+        let systemPrompt = "";
+
+        if(currentMode === "home"){
+
+            systemPrompt =
+            "You are Weel Cot AI made by the Suprim Leader. Be fun and smart.";
+
         }
 
-        currentX += platformWidth + 60 + Math.floor(seededRandom(seed++) * 45);
-    }
+        if(currentMode === "school"){
 
-    objects.push({ x: 745, y: 300, w: 30, h: 50, type: 'goal' });
-    objects.push({ x: 720, y: 350, w: 80, h: 50, type: 'solid' }); 
-    return objects;
-}
+            let webAnswer = "";
 
-function startLevel() {
-    levelCountUI.textContent = currentLevel;
-    player.x = 40; player.y = 300;
-    player.vx = 0; player.vy = 0;
-    player.trail = [];
-    mapObjects = generateLevel(currentLevel);
-}
+            try{
 
-function createExplosion(x, y) {
-    for (let i = 0; i < 15; i++) {
-        particles.push({
-            x: x, y: y,
-            vx: (Math.random() - 0.5) * 6,
-            vy: (Math.random() - 0.5) * 6,
-            radius: Math.random() * 4 + 2,
-            alpha: 1
+                const search =
+                await fetch(
+                "http://localhost:3000/search?q=" +
+                encodeURIComponent(text)
+                );
+
+                const searchData =
+                await search.json();
+
+                webAnswer =
+                searchData.answer;
+
+            }catch(e){
+
+                webAnswer =
+                "No web info.";
+
+            }
+
+            systemPrompt =
+            "You are Weel Cot AI School Mode. " +
+            "Use this web info if useful: " +
+            webAnswer;
+        }
+
+        const res =
+        await fetch(
+        "https://openrouter.ai/api/v1/chat/completions",
+        {
+            method:"POST",
+
+            headers:{
+                "Authorization":
+                "Bearer " + API_KEY,
+
+                "Content-Type":
+                "application/json"
+            },
+
+            body:JSON.stringify({
+
+                model:
+                "meta-llama/llama-3-8b-instruct",
+
+                messages:[
+                    {
+                        role:"system",
+                        content:systemPrompt
+                    },
+                    {
+                        role:"user",
+                        content:text
+                    }
+                ]
+
+            })
+
         });
-    }
-}
 
-function die() {
-    deaths++;
-    deathCountUI.textContent = deaths;
-    createExplosion(player.x, player.y);
-    player.x = 40; player.y = 300;
-    player.vx = 0; player.vy = 0;
-    player.trail = [];
-    mapObjects.forEach(obj => {
-        if (obj.type === 'fake') obj.visible = true;
-        if (obj.type === 'trap') obj.triggered = false;
-    });
-}
+        const data =
+        await res.json();
 
-function getPlayerRect() {
-    return { x: player.x - player.radius, y: player.y - player.radius, w: player.radius * 2, h: player.radius * 2 };
-}
+        return data.choices?.[0]
+        ?.message?.content
+        || "No response";
 
-function checkCollision(rect1, rect2) {
-    return rect1.x < rect2.x + rect2.w && rect1.x + rect1.w > rect2.x && rect1.y < rect2.y + rect2.h && rect1.y + rect1.h > rect2.y;
-}
+    }catch(err){
 
-function update() {
-    const mod = getLevelModifier(currentLevel);
-    player.vy += mod.gravity; 
+        return "AI error";
 
-    // Handle Input Modifications
-    let moveLeft = mod.inverted ? keys.Right : keys.Left;
-    let moveRight = mod.inverted ? keys.Left : keys.Right;
-    let currentSpeed = mod.speedDebuff ? player.speed * 0.65 : player.speed;
-
-    let standType = 'solid';
-
-    if (moveLeft) player.vx = -currentSpeed;
-    else if (moveRight) player.vx = currentSpeed;
-    else {
-        if (player.grounded) {
-            let pRect = getPlayerRect();
-            mapObjects.forEach(obj => {
-                if (checkCollision({x: pRect.x, y: pRect.y + 1, w: pRect.w, h: pRect.h}, obj)) standType = obj.type;
-            });
-        }
-        player.vx = (standType === 'ice') ? player.vx * 0.94 : 0;
     }
 
-    if (keys.Up && player.grounded) {
-        player.vy = -player.jumpForce;
-        player.grounded = false;
-        player.stretchX = 0.7; player.stretchY = 1.4; // Jump stretching
-    }
+}
 
-    // Squash & Stretch recovery animation
-    player.stretchX += (1 - player.stretchX) * 0.1;
-    player.stretchY += (1 - player.stretchY) * 0.1;
+function send(){
 
-    // Build Player Movement Trail
-    player.trail.push({ x: player.x, y: player.y });
-    if (player.trail.length > 8) player.trail.shift();
+    let input =
+    document.getElementById("input");
 
-    // Horizontal Movement Checks
-    player.x += player.vx;
-    let pRect = getPlayerRect();
-    mapObjects.forEach(obj => {
-        if (obj.type === 'solid' || obj.type === 'ice' || (obj.type === 'fake' && obj.visible)) {
-            if (checkCollision(pRect, obj)) {
-                if (player.vx > 0) player.x = obj.x - player.radius;
-                if (player.vx < 0) player.x = obj.x + obj.w + player.radius;
-            }
-        }
+    let text =
+    input.value.trim();
+
+    if(!text) return;
+
+    add(text,"user");
+
+    input.value="";
+
+    ai(text).then(res=>{
+
+        add(res,"bot");
+
     });
 
-    // Vertical Movement Checks
-    player.grounded = false;
-    player.y += player.vy;
-    pRect = getPlayerRect();
-    
-    mapObjects.forEach(obj => {
-        if (obj.type === 'trap' && Math.abs(player.x - obj.x) < 60 && player.y > obj.y - 20) {
-            obj.triggered = true;
-        }
+}
 
-        if (obj.type === 'solid' || obj.type === 'ice' || (obj.type === 'fake' && obj.visible)) {
-            if (checkCollision(pRect, obj)) {
-                if (player.vy > 0) { // Landing
-                    player.y = obj.y - player.radius;
-                    player.vy = 0;
-                    if (!player.grounded) { player.stretchX = 1.4; player.stretchY = 0.7; } // Impact squash
-                    player.grounded = true;
-                    if (obj.type === 'fake') setTimeout(() => { obj.visible = false; }, 80);
-                } else if (player.vy < 0) { // Bonk head
-                    player.y = obj.y + obj.h + player.radius;
-                    player.vy = 0;
-                }
-            }
-        }
+document
+.getElementById("input")
+.addEventListener("keydown",(e)=>{
 
-        if (obj.type === 'spike' || (obj.type === 'trap' && obj.triggered)) {
-            if (checkCollision(pRect, obj)) die();
-        }
+    if(e.key==="Enter"){
 
-        if (obj.type === 'goal' && checkCollision(pRect, obj)) {
-            if (currentLevel < 100) { currentLevel++; startLevel(); }
+        send();
+
+    }
+
+});
+
+</script>
+
+</body>
+</html>
