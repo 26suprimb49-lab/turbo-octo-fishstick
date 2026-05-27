@@ -3,149 +3,193 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Super Easy Game Extreme</title>
+    <title>The Most Fair Obby Ever</title>
     <style>
         body {
             margin: 0;
-            background-color: #111;
-            color: #fff;
-            font-family: 'Courier New', Courier, monospace;
+            background: #111;
+            color: white;
+            font-family: 'Courier New', monospace;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             height: 100vh;
             overflow: hidden;
-            user-select: none;
         }
-        #ui-box {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-        #game-container {
-            position: relative;
-            width: 600px;
-            height: 400px;
-            background-color: #222;
-            border: 4px solid #ff0055;
-            box-shadow: 0 0 20px #ff0055;
-        }
-        #win-btn {
-            position: absolute;
-            padding: 10px 20px;
-            font-size: 16px;
-            font-weight: bold;
-            background-color: #00ff66;
-            color: #000;
-            border: none;
-            cursor: pointer;
-            border-radius: 5px;
-            transition: all 0.05s ease;
-        }
-        #troll-text {
-            position: absolute;
-            color: #ff3333;
-            font-size: 14px;
-            pointer-events: none;
-            font-weight: bold;
-        }
+        h1 { margin: 5px; color: #ff3333; }
+        #canvas-container { position: relative; }
+        canvas { background: #222; border: 4px solid #ff3333; box-shadow: 0 0 20px #ff3333; }
     </style>
 </head>
 <body>
 
-    <div id="ui-box">
-        <h1>Level 1: Click the Green Button to Win!</h1>
-        <h2>Clicks: <span id="click-count">0</span> | Misses: <span id="miss-count">0</span></h2>
+    <h1>Unfair Obby 2D</h1>
+    <div id="status">Deaths: <span id="death-count">0</span> | Level: 1</div>
+    <div id="canvas-container">
+        <canvas id="gameCanvas" width="800" height="400"></canvas>
     </div>
 
-    <div id="game-container">
-        <button id="win-btn" style="top: 180px; left: 250px;">WIN GAME</button>
-        <div id="troll-text"></div>
-    </div>
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+const deathCountUI = document.getElementById("death-count");
 
-    <script>
-        const btn = document.getElementById('win-btn');
-        const container = document.getElementById('game-container');
-        const clickCountIdx = document.getElementById('click-count');
-        const missCountIdx = document.getElementById('miss-count');
-        const trollText = document.getElementById('troll-text');
+let deaths = 0;
 
-        let clicks = 0;
-        let misses = 0;
+// Player Setup
+const player = {
+    x: 50, y: 300, w: 20, h: 20,
+    vx: 0, vy: 0,
+    speed: 4, jumpForce: 11,
+    grounded: false
+};
 
-        const insults = [
-            "Too slow!",
-            "Not even close!",
-            "My grandma clicks faster.",
-            "Are you lagging?",
-            "Click harder!",
-            "Aim issues?",
-            "Lmao missed."
-        ];
+// Controls
+const keys = { Left: false, Right: false, Up: false };
+window.addEventListener("keydown", (e) => handleKey(e, true));
+window.addEventListener("keyup", (e) => handleKey(e, false));
 
-        // Teleport button away when mouse gets close
-        container.addEventListener('mousemove', (e) => {
-            const btnRect = btn.getBoundingClientRect();
-            const containerRect = container.getBoundingClientRect();
+function handleKey(e, isDown) {
+    if (e.code === "ArrowLeft" || e.code === "KeyA") keys.Left = isDown;
+    if (e.code === "ArrowRight" || e.code === "KeyD") keys.Right = isDown;
+    if (e.code === "ArrowUp" || e.code === "KeyW" || e.code === "Space") keys.Up = isDown;
+}
 
-            // Calculate relative mouse position inside container
-            const mouseX = e.clientX - containerRect.left;
-            const mouseY = e.clientY - containerRect.top;
+// Map Objects (x, y, width, height, type)
+// Types: 'solid', 'fake' (disappears), 'trap' (invisible spike until close), 'spike' (visible), 'goal'
+const mapObjects = [
+    { x: 0, y: 360, w: 150, h: 40, type: 'solid' },     // Spawn
+    { x: 220, y: 300, w: 80, h: 20, type: 'solid' },     // Jump 1
+    { x: 340, y: 240, w: 80, h: 20, type: 'fake', visible: true }, // FAKE BLOCK!
+    { x: 460, y: 180, w: 100, h: 20, type: 'solid' },    // Safe block?
+    { x: 490, y: 150, w: 20, h: 30, type: 'trap', triggered: false }, // INVISIBLE SPIKE!
+    { x: 620, y: 220, w: 60, h: 20, type: 'solid' },     // Final jump
+    { x: 730, y: 160, w: 40, h: 40, type: 'goal' },      // Win flag
+    { x: 0, y: 395, w: 800, h: 10, type: 'spike' }       // Pit floor death
+];
 
-            // Get center of the button
-            const btnCenterX = btn.offsetLeft + (btnRect.width / 2);
-            const btnCenterY = btn.offsetTop + (btnRect.height / 2);
+function die() {
+    deaths++;
+    deathCountUI.textContent = deaths;
+    player.x = 50;
+    player.y = 300;
+    player.vx = 0;
+    player.vy = 0;
+    // Reset the fake traps so they trick the player again
+    mapObjects.forEach(obj => {
+        if (obj.type === 'fake') obj.visible = true;
+        if (obj.type === 'trap') obj.triggered = false;
+    });
+}
 
-            // Calculate distance between mouse and button center
-            const distance = Math.hypot(mouseX - btnCenterX, mouseY - btnCenterY);
+function checkCollision(rect1, rect2) {
+    return rect1.x < rect2.x + rect2.w &&
+           rect1.x + rect1.w > rect2.x &&
+           rect1.y < rect2.y + rect2.h &&
+           rect1.y + rect1.h > rect2.y;
+}
 
-            // Trigger teleport if mouse is closer than 80 pixels
-            if (distance < 80) {
-                teleportButton();
+function update() {
+    // Gravity & Movement
+    player.vy += 0.5; // Gravity
+    if (keys.Left) player.vx = -player.speed;
+    else if (keys.Right) player.vx = player.speed;
+    else player.vx = 0;
+
+    if (keys.Up && player.grounded) {
+        player.vy = -player.jumpForce;
+        player.grounded = false;
+    }
+
+    // Move Horizontal & Check Collision
+    player.x += player.vx;
+    mapObjects.forEach(obj => {
+        if (obj.type === 'solid' || (obj.type === 'fake' && obj.visible)) {
+            if (checkCollision(player, obj)) {
+                if (player.vx > 0) player.x = obj.x - player.w;
+                if (player.vx < 0) player.x = obj.x + obj.w;
             }
-        });
+        }
+    });
 
-        function teleportButton() {
-            const maxX = container.clientWidth - btn.clientWidth;
-            const maxY = container.clientHeight - btn.clientHeight;
-
-            const randomX = Math.floor(Math.random() * maxX);
-            const randomY = Math.floor(Math.random() * maxY);
-
-            btn.style.left = `${randomX}px`;
-            btn.style.top = `${randomY}px`;
+    // Move Vertical & Check Collision
+    player.grounded = false;
+    player.y += player.vy;
+    
+    mapObjects.forEach(obj => {
+        // Trigger hidden spikes early if player gets horizontally close
+        if (obj.type === 'trap' && Math.abs(player.x - obj.x) < 40 && player.y > obj.y) {
+            obj.triggered = true;
         }
 
-        // Count accidental clicks inside the container
-        container.addEventListener('click', (e) => {
-            if (e.target !== btn) {
-                misses++;
-                missCountIdx.textContent = misses;
-                showTrollText(e.clientX, e.clientY);
+        if (obj.type === 'solid' || (obj.type === 'fake' && obj.visible)) {
+            if (checkCollision(player, obj)) {
+                if (player.vy > 0) { // Landing
+                    player.y = obj.y - player.h;
+                    player.vy = 0;
+                    player.grounded = true;
+                    if (obj.type === 'fake') obj.visible = false; // Poof! Gone.
+                } else if (player.vy < 0) { // Hitting ceiling
+                    player.y = obj.y + obj.h;
+                    player.vy = 0;
+                }
             }
-        });
-
-        // Fake success trigger
-        btn.addEventListener('click', (e) => {
-            clicks++;
-            clickCountIdx.textContent = clicks;
-            alert("Error 404: Victory not found. Restarting Level 1.");
-            location.reload();
-        });
-
-        function showTrollText(clientX, clientY) {
-            const containerRect = container.getBoundingClientRect();
-            const x = clientX - containerRect.left;
-            const y = clientY - containerRect.top;
-
-            trollText.style.left = `${x}px`;
-            trollText.style.top = `${y}px`;
-            trollText.textContent = insults[Math.floor(Math.random() * insults.length)];
-
-            setTimeout(() => {
-                trollText.textContent = "";
-            }, 800);
         }
-    </script>
+
+        // Deadly objects
+        if (obj.type === 'spike' || (obj.type === 'trap' && obj.triggered)) {
+            if (checkCollision(player, obj)) die();
+        }
+
+        // Goal object
+        if (obj.type === 'goal' && checkCollision(player, obj)) {
+            alert("You won... but it restarts anyway.");
+            deaths = 0;
+            die();
+        }
+    });
+
+    // Screen boundaries
+    if (player.x < 0) player.x = 0;
+    if (player.x > canvas.width - player.w) player.x = canvas.width - player.w;
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw Map Elements
+    mapObjects.forEach(obj => {
+        if (obj.type === 'solid') {
+            ctx.fillStyle = "#555";
+            ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+        } else if (obj.type === 'fake' && obj.visible) {
+            ctx.fillStyle = "#555"; // Looks identical to solid!
+            ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+        } else if (obj.type === 'spike') {
+            ctx.fillStyle = "#ff3333";
+            ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+        } else if (obj.type === 'trap' && obj.triggered) {
+            ctx.fillStyle = "#ffaa00"; // Reveals yellow trap when sprung!
+            ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+        } else if (obj.type === 'goal') {
+            ctx.fillStyle = "#00ff66";
+            ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
+        }
+    });
+
+    // Draw Player
+    ctx.fillStyle = "#00a2ff";
+    ctx.fillRect(player.x, player.y, player.w, player.h);
+}
+
+function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+gameLoop();
+</script>
 </body>
 </html>
