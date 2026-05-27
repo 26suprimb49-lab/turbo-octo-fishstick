@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Super Easy Game Extreme</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #111;
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+        #ui-box {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        #game-container {
+            position: relative;
+            width: 600px;
+            height: 400px;
+            background-color: #222;
+            border: 4px solid #ff0055;
+            box-shadow: 0 0 20px #ff0055;
+        }
+        #win-btn {
+            position: absolute;
+            padding: 10px 20px;
+            font-size: 16px;
+            font-weight: bold;
+            background-color: #00ff66;
+            color: #000;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: all 0.05s ease;
+        }
+        #troll-text {
+            position: absolute;
+            color: #ff3333;
+            font-size: 14px;
+            pointer-events: none;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui-box">
+        <h1>Level 1: Click the Green Button to Win!</h1>
+        <h2>Clicks: <span id="click-count">0</span> | Misses: <span id="miss-count">0</span></h2>
+    </div>
+
+    <div id="game-container">
+        <button id="win-btn" style="top: 180px; left: 250px;">WIN GAME</button>
+        <div id="troll-text"></div>
+    </div>
+
+    <script>
+        const btn = document.getElementById('win-btn');
+        const container = document.getElementById('game-container');
+        const clickCountIdx = document.getElementById('click-count');
+        const missCountIdx = document.getElementById('miss-count');
+        const trollText = document.getElementById('troll-text');
+
+        let clicks = 0;
+        let misses = 0;
+
+        const insults = [
+            "Too slow!",
+            "Not even close!",
+            "My grandma clicks faster.",
+            "Are you lagging?",
+            "Click harder!",
+            "Aim issues?",
+            "Lmao missed."
+        ];
+
+        // Teleport button away when mouse gets close
+        container.addEventListener('mousemove', (e) => {
+            const btnRect = btn.getBoundingClientRect();
+            const containerRect = container.getBoundingClientRect();
+
+            // Calculate relative mouse position inside container
+            const mouseX = e.clientX - containerRect.left;
+            const mouseY = e.clientY - containerRect.top;
+
+            // Get center of the button
+            const btnCenterX = btn.offsetLeft + (btnRect.width / 2);
+            const btnCenterY = btn.offsetTop + (btnRect.height / 2);
+
+            // Calculate distance between mouse and button center
+            const distance = Math.hypot(mouseX - btnCenterX, mouseY - btnCenterY);
+
+            // Trigger teleport if mouse is closer than 80 pixels
+            if (distance < 80) {
+                teleportButton();
+            }
+        });
+
+        function teleportButton() {
+            const maxX = container.clientWidth - btn.clientWidth;
+            const maxY = container.clientHeight - btn.clientHeight;
+
+            const randomX = Math.floor(Math.random() * maxX);
+            const randomY = Math.floor(Math.random() * maxY);
+
+            btn.style.left = `${randomX}px`;
+            btn.style.top = `${randomY}px`;
+        }
+
+        // Count accidental clicks inside the container
+        container.addEventListener('click', (e) => {
+            if (e.target !== btn) {
+                misses++;
+                missCountIdx.textContent = misses;
+                showTrollText(e.clientX, e.clientY);
+            }
+        });
+
+        // Fake success trigger
+        btn.addEventListener('click', (e) => {
+            clicks++;
+            clickCountIdx.textContent = clicks;
+            alert("Error 404: Victory not found. Restarting Level 1.");
+            location.reload();
+        });
+
+        function showTrollText(clientX, clientY) {
+            const containerRect = container.getBoundingClientRect();
+            const x = clientX - containerRect.left;
+            const y = clientY - containerRect.top;
+
+            trollText.style.left = `${x}px`;
+            trollText.style.top = `${y}px`;
+            trollText.textContent = insults[Math.floor(Math.random() * insults.length)];
+
+            setTimeout(() => {
+                trollText.textContent = "";
+            }, 800);
+        }
+    </script>
+</body>
+</html>
