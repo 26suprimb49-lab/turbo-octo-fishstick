@@ -14,6 +14,7 @@ body{
     height:100vh;
 }
 
+/* SIDEBAR */
 .sidebar{
     width:260px;
     background:#0f1424;
@@ -30,14 +31,14 @@ body{
 }
 
 .logo{
-    width:40px;
-    height:40px;
+    width:42px;
+    height:42px;
     border-radius:50%;
     background:radial-gradient(circle,#10a37f,#1f2a44);
     display:flex;
     align-items:center;
     justify-content:center;
-    font-size:18px;
+    font-size:20px;
 }
 
 .newchat{
@@ -59,6 +60,7 @@ body{
     cursor:pointer;
 }
 
+/* MAIN */
 .main{
     flex:1;
     display:flex;
@@ -86,6 +88,7 @@ body{
     border-radius:10px;
     max-width:75%;
     white-space:pre-wrap;
+    line-height:1.4;
 }
 
 .user{
@@ -101,6 +104,7 @@ body{
     display:flex;
     padding:10px;
     background:#0f1424;
+    gap:8px;
 }
 
 input{
@@ -115,7 +119,6 @@ input{
 
 button{
     padding:12px;
-    margin-left:8px;
     border:none;
     border-radius:8px;
     background:#10a37f;
@@ -142,7 +145,9 @@ select{
         <b>Weel Cot AI</b>
     </div>
 
-    <button class="newchat" onclick="newChat()">+ New Chat</button>
+    <button class="newchat" onclick="newChat()">
+        + New Chat
+    </button>
 
     <div id="chatList"></div>
 
@@ -164,16 +169,18 @@ select{
 <div class="chat" id="chat"></div>
 
 <div class="inputbar">
-<input id="input" placeholder="Ask anything..." />
-<button onclick="send()">Send</button>
+    <input id="input" placeholder="Ask anything..." />
+    <button onclick="send()">Send</button>
 </div>
 
 </div>
 
 <script>
 
-const API_KEY = "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";
+/* 🔥 PUT YOUR REAL KEY HERE */
+const API_KEY = "PASTE_YOUR_OPENROUTER_KEY";
 
+/* MODE */
 let currentMode = "home";
 
 function changeMode(){
@@ -181,6 +188,7 @@ function changeMode(){
     document.getElementById("modeSelect").value;
 }
 
+/* CHATS */
 let chats =
 JSON.parse(localStorage.getItem("chats") || "[]");
 
@@ -203,11 +211,11 @@ function save(){
 function newChat(){
 
     chats.push({
-        name:"Chat "+(chats.length+1),
+        name:"Chat " + (chats.length+1),
         msgs:[]
     });
 
-    current = chats.length-1;
+    current = chats.length - 1;
 
     save();
 
@@ -232,8 +240,11 @@ function renderChats(){
         div.innerText=c.name;
 
         div.onclick=()=>{
+
             current=i;
+
             renderChat();
+
         };
 
         box.appendChild(div);
@@ -243,6 +254,8 @@ function renderChats(){
 }
 
 function renderChat(){
+
+    if(!chats[current]) return;
 
     document.getElementById("title")
     .innerText =
@@ -259,14 +272,16 @@ function renderChat(){
         document.createElement("div");
 
         div.className =
-        "msg "+m.type;
+        "msg " + m.type;
 
-        div.innerText=m.text;
+        div.innerText =
+        m.text;
 
         box.appendChild(div);
 
     });
 
+    box.scrollTop = box.scrollHeight;
 }
 
 function add(text,type){
@@ -281,48 +296,55 @@ function add(text,type){
     renderChat();
 }
 
+/* 🔥 AI */
 async function ai(text){
 
     try{
 
         let systemPrompt = "";
 
+        /* HOME MODE */
         if(currentMode === "home"){
 
             systemPrompt =
-            "You are Weel Cot AI made by the Suprim Leader. Be fun and smart.";
+            "You are Weel Cot AI made by the Suprim Leader. " +
+            "Be smart, fun, short, and helpful.";
 
         }
 
+        /* SCHOOL MODE */
         if(currentMode === "school"){
 
-            let webAnswer = "";
+            let webInfo = "";
 
             try{
 
                 const search =
                 await fetch(
-                "http://localhost:3000/search?q=" +
-                encodeURIComponent(text)
+                    "https://api.duckduckgo.com/?q=" +
+                    encodeURIComponent(text) +
+                    "&format=json"
                 );
 
                 const searchData =
                 await search.json();
 
-                webAnswer =
-                searchData.answer;
+                webInfo =
+                searchData.AbstractText ||
+                searchData.Heading ||
+                "";
 
             }catch(e){
 
-                webAnswer =
-                "No web info.";
+                webInfo = "";
 
             }
 
             systemPrompt =
-            "You are Weel Cot AI School Mode. " +
+            "You are Weel Cot AI School Mode made by the Suprim Leader. " +
+            "Help with homework and school work. " +
             "Use this web info if useful: " +
-            webAnswer;
+            webInfo;
         }
 
         const res =
@@ -342,17 +364,31 @@ async function ai(text){
             body:JSON.stringify({
 
                 model:
-                "meta-llama/llama-3-8b-instruct",
+                "mistralai/mistral-7b-instruct",
 
                 messages:[
+
                     {
                         role:"system",
                         content:systemPrompt
                     },
+
+                    ...chats[current].msgs
+                    .slice(-10)
+                    .map(m=>({
+                        role:
+                        m.type==="user"
+                        ? "user"
+                        : "assistant",
+
+                        content:m.text
+                    })),
+
                     {
                         role:"user",
                         content:text
                     }
+
                 ]
 
             })
@@ -362,18 +398,30 @@ async function ai(text){
         const data =
         await res.json();
 
+        console.log(data);
+
+        if(data.error){
+
+            return "⚠ " +
+            data.error.message;
+
+        }
+
         return data.choices?.[0]
         ?.message?.content
-        || "No response";
+        || "⚠ No response";
 
     }catch(err){
 
-        return "AI error";
+        console.log(err);
+
+        return "⚠ AI error";
 
     }
 
 }
 
+/* SEND */
 function send(){
 
     let input =
@@ -396,6 +444,7 @@ function send(){
 
 }
 
+/* ENTER */
 document
 .getElementById("input")
 .addEventListener("keydown",(e)=>{
