@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>100 Levels of Pure Rage</title>
+    <title>100 Levels of Escalating Rage</title>
     <style>
         body {
             margin: 0;
-            background: #111;
+            background: #09090e;
             color: white;
-            font-family: 'Courier New', monospace;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -17,15 +17,17 @@
             height: 100vh;
             overflow: hidden;
         }
-        h1 { margin: 5px; color: #ff3333; font-size: 24px; }
-        #status { font-size: 18px; margin-bottom: 10px; }
+        h1 { margin: 5px; color: #ff0055; font-size: 28px; text-shadow: 0 0 10px #ff0055; }
+        #status { font-size: 18px; margin-bottom: 12px; font-weight: bold; letter-spacing: 1px; }
+        #modifier-alert { color: #ffcc00; font-weight: bold; margin-bottom: 8px; height: 20px; text-shadow: 0 0 5px #ffcc00; }
         #canvas-container { position: relative; }
-        canvas { background: #1a1a1a; border: 4px solid #ff3333; box-shadow: 0 0 20px #ff3333; }
+        canvas { background: #13131a; border: 4px solid #ff0055; box-shadow: 0 0 25px rgba(255, 0, 85, 0.4); border-radius: 8px; }
     </style>
 </head>
 <body>
 
-    <h1>The 100-Level Rage Obby</h1>
+    <h1>The Escalating Rage Obby</h1>
+    <div id="modifier-alert">Level Modifier: Normal Physics</div>
     <div id="status">Level: <span id="level-count">1</span>/100 | Deaths: <span id="death-count">0</span></div>
     <div id="canvas-container">
         <canvas id="gameCanvas" width="800" height="400"></canvas>
@@ -36,26 +38,28 @@ const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 const levelCountUI = document.getElementById("level-count");
 const deathCountUI = document.getElementById("death-count");
+const alertUI = document.getElementById("modifier-alert");
 
 let currentLevel = 1;
 let deaths = 0;
 let mapObjects = [];
+let particles = [];
 
-// Simple seeded random generator to ensure levels are repeatable but chaotic
 function seededRandom(seed) {
     const x = Math.sin(seed++) * 10000;
     return x - Math.floor(x);
 }
 
-// Player Setup
+// Better Player Configuration (Smooth physics, visuals, and trail)
 const player = {
-    x: 40, y: 300, w: 20, h: 20,
+    x: 40, y: 300, radius: 11,
     vx: 0, vy: 0,
-    speed: 4, jumpForce: 11,
-    grounded: false
+    speed: 4.5, jumpForce: 11.5,
+    grounded: false,
+    trail: [],
+    stretchX: 1, stretchY: 1
 };
 
-// Controls
 const keys = { Left: false, Right: false, Up: false };
 window.addEventListener("keydown", (e) => handleKey(e, true));
 window.addEventListener("keyup", (e) => handleKey(e, false));
@@ -66,220 +70,176 @@ function handleKey(e, isDown) {
     if (e.code === "ArrowUp" || e.code === "KeyW" || e.code === "Space") keys.Up = isDown;
 }
 
-// Generate an entire level layout mathematically based on the level number
+// Difficulty Scaling Engine (Triggers every 10 levels)
+function getLevelModifier(level) {
+    if (level <= 10) return { name: "Normal Physics", trapChance: 0.3, iceChance: 0.1, gravity: 0.5, speedDebuff: false, inverted: false };
+    if (level <= 20) return { name: "⚠️ Trap Frenzy (More hidden hazards)", trapChance: 0.6, iceChance: 0.2, gravity: 0.5, speedDebuff: false, inverted: false };
+    if (level <= 30) return { name: "🧊 Ice World (Super slippery)", trapChance: 0.4, iceChance: 0.7, gravity: 0.5, speedDebuff: false, inverted: false };
+    if (level <= 40) return { name: "🪐 High Gravity (Heavy jumps)", trapChance: 0.4, iceChance: 0.2, gravity: 0.75, speedDebuff: false, inverted: false };
+    if (level <= 50) return { name: "⛓️ Heavy Ankles (Slower movement)", trapChance: 0.5, iceChance: 0.2, gravity: 0.5, speedDebuff: true, inverted: false };
+    if (level <= 60) return { name: "🌀 Left is Right (Inverted Controls!)", trapChance: 0.5, iceChance: 0.2, gravity: 0.5, speedDebuff: false, inverted: true };
+    if (level <= 70) return { name: "🛑 Blind Jumps (Fewer safe blocks)", trapChance: 0.7, iceChance: 0.4, gravity: 0.5, speedDebuff: false, inverted: false };
+    if (level <= 80) return { name: "💥 Chaos Mode (Heavy Gravity + Slippery)", trapChance: 0.6, iceChance: 0.6, gravity: 0.7, speedDebuff: false, inverted: false };
+    if (level <= 90) return { name: "🧠 Psychological Warfare (Inverted + Fast Traps)", trapChance: 0.8, iceChance: 0.3, gravity: 0.5, speedDebuff: false, inverted: true };
+    return { name: "💀 IMPOSSIBLE RAGE (Maximum Penalty)", trapChance: 0.9, iceChance: 0.5, gravity: 0.75, speedDebuff: true, inverted: true };
+}
+
 function generateLevel(levelNum) {
     const objects = [];
-    let seed = levelNum * 5321; // Unique seed per level
+    let seed = levelNum * 7431;
+    const mod = getLevelModifier(levelNum);
+    alertUI.textContent = `Level Modifier: ${mod.name}`;
 
-    // Spawn platform (always safe)
-    objects.push({ x: 0, y: 350, w: 100, h: 50, type: 'solid' });
+    objects.push({ x: 0, y: 350, w: 100, h: 50, type: 'solid' }); // Spawn
+    objects.push({ x: 0, y: 395, w: 800, h: 5, type: 'spike' });  // Lava
 
-    // Lava pit floor (always deadly)
-    objects.push({ x: 0, y: 390, w: 800, h: 10, type: 'spike' });
-
-    // Procedurally place intermediate platforms
     let currentX = 140;
-    while (currentX < 680) {
-        const platformWidth = 50 + Math.floor(seededRandom(seed++) * 40); // 50 to 90 width
-        const platformY = 200 + Math.floor(seededRandom(seed++) * 120);  // Varied heights
+    while (currentX < 670) {
+        let platformWidth = 50 + Math.floor(seededRandom(seed++) * 35);
+        let platformY = 210 + Math.floor(seededRandom(seed++) * 110);
         
-        // Randomly pick a type: 'solid', 'fake' (drops you), or 'ice' (slippery)
+        // If blind mode active, platforms are significantly smaller
+        if (levelNum > 60 && levelNum <= 70) platformWidth -= 15;
+
         let typeRand = seededRandom(seed++);
         let type = 'solid';
-        if (typeRand > 0.7) type = 'fake';
-        else if (typeRand > 0.45) type = 'ice';
+        if (typeRand > 0.75) type = 'fake';
+        else if (typeRand > (1 - mod.iceChance)) type = 'ice';
 
-        // Add the platform
         objects.push({ x: currentX, y: platformY, w: platformWidth, h: 20, type: type, visible: true });
 
-        // Troll trap mechanics: Chance to spawn an invisible spike right above or in front of the platform
-        if (seededRandom(seed++) > 0.4) {
-            const spikeX = currentX + Math.floor(seededRandom(seed++) * (platformWidth - 15));
-            objects.push({ 
-                x: spikeX, 
-                y: platformY - 25, 
-                w: 16, 
-                h: 25, 
-                type: 'trap', 
-                triggered: false 
-            });
+        // Hidden traps calculation
+        if (seededRandom(seed++) < mod.trapChance) {
+            const spikeX = currentX + Math.floor(seededRandom(seed++) * (platformWidth - 14));
+            objects.push({ x: spikeX, y: platformY - 22, w: 14, h: 22, type: 'trap', triggered: false });
         }
 
-        // Advance X coordinates for the next jump gap
-        currentX += platformWidth + 65 + Math.floor(seededRandom(seed++) * 45);
+        currentX += platformWidth + 60 + Math.floor(seededRandom(seed++) * 45);
     }
 
-    // Goal Flag (always at the far right end)
-    objects.push({ x: 740, y: 300, w: 30, h: 50, type: 'goal' });
-    objects.push({ x: 720, y: 350, w: 80, h: 50, type: 'solid' }); // Goal platform
-
+    objects.push({ x: 745, y: 300, w: 30, h: 50, type: 'goal' });
+    objects.push({ x: 720, y: 350, w: 80, h: 50, type: 'solid' }); 
     return objects;
 }
 
 function startLevel() {
     levelCountUI.textContent = currentLevel;
-    player.x = 40;
-    player.y = 300;
-    player.vx = 0;
-    player.vy = 0;
+    player.x = 40; player.y = 300;
+    player.vx = 0; player.vy = 0;
+    player.trail = [];
     mapObjects = generateLevel(currentLevel);
+}
+
+function createExplosion(x, y) {
+    for (let i = 0; i < 15; i++) {
+        particles.push({
+            x: x, y: y,
+            vx: (Math.random() - 0.5) * 6,
+            vy: (Math.random() - 0.5) * 6,
+            radius: Math.random() * 4 + 2,
+            alpha: 1
+        });
+    }
 }
 
 function die() {
     deaths++;
     deathCountUI.textContent = deaths;
-    player.x = 40;
-    player.y = 300;
-    player.vx = 0;
-    player.vy = 0;
-    
-    // Reset all traps for the current level
+    createExplosion(player.x, player.y);
+    player.x = 40; player.y = 300;
+    player.vx = 0; player.vy = 0;
+    player.trail = [];
     mapObjects.forEach(obj => {
         if (obj.type === 'fake') obj.visible = true;
         if (obj.type === 'trap') obj.triggered = false;
     });
 }
 
+function getPlayerRect() {
+    return { x: player.x - player.radius, y: player.y - player.radius, w: player.radius * 2, h: player.radius * 2 };
+}
+
 function checkCollision(rect1, rect2) {
-    return rect1.x < rect2.x + rect2.w &&
-           rect1.x + rect1.w > rect2.x &&
-           rect1.y < rect2.y + rect2.h &&
-           rect1.y + rect1.h > rect2.y;
+    return rect1.x < rect2.x + rect2.w && rect1.x + rect1.w > rect2.x && rect1.y < rect2.y + rect2.h && rect1.y + rect1.h > rect2.y;
 }
 
 function update() {
-    player.vy += 0.5; // Gravity
+    const mod = getLevelModifier(currentLevel);
+    player.vy += mod.gravity; 
 
-    // Identify what platform type the player is currently standing on
+    // Handle Input Modifications
+    let moveLeft = mod.inverted ? keys.Right : keys.Left;
+    let moveRight = mod.inverted ? keys.Left : keys.Right;
+    let currentSpeed = mod.speedDebuff ? player.speed * 0.65 : player.speed;
+
     let standType = 'solid';
-    
-    // Horizontal Movement
-    if (keys.Left) player.vx = -player.speed;
-    else if (keys.Right) player.vx = player.speed;
+
+    if (moveLeft) player.vx = -currentSpeed;
+    else if (moveRight) player.vx = currentSpeed;
     else {
-        // Friction: Ice slides, solid stops instantly
         if (player.grounded) {
+            let pRect = getPlayerRect();
             mapObjects.forEach(obj => {
-                if (checkCollision({x: player.x, y: player.y + 1, w: player.w, h: player.h}, obj)) {
-                    standType = obj.type;
-                }
+                if (checkCollision({x: pRect.x, y: pRect.y + 1, w: pRect.w, h: pRect.h}, obj)) standType = obj.type;
             });
         }
-        if (standType === 'ice') {
-            player.vx *= 0.95; // Slidiiing
-        } else {
-            player.vx = 0;
-        }
+        player.vx = (standType === 'ice') ? player.vx * 0.94 : 0;
     }
 
     if (keys.Up && player.grounded) {
         player.vy = -player.jumpForce;
         player.grounded = false;
+        player.stretchX = 0.7; player.stretchY = 1.4; // Jump stretching
     }
 
-    // Horizontal Collision Execution
+    // Squash & Stretch recovery animation
+    player.stretchX += (1 - player.stretchX) * 0.1;
+    player.stretchY += (1 - player.stretchY) * 0.1;
+
+    // Build Player Movement Trail
+    player.trail.push({ x: player.x, y: player.y });
+    if (player.trail.length > 8) player.trail.shift();
+
+    // Horizontal Movement Checks
     player.x += player.vx;
+    let pRect = getPlayerRect();
     mapObjects.forEach(obj => {
         if (obj.type === 'solid' || obj.type === 'ice' || (obj.type === 'fake' && obj.visible)) {
-            if (checkCollision(player, obj)) {
-                if (player.vx > 0) player.x = obj.x - player.w;
-                if (player.vx < 0) player.x = obj.x + obj.w;
+            if (checkCollision(pRect, obj)) {
+                if (player.vx > 0) player.x = obj.x - player.radius;
+                if (player.vx < 0) player.x = obj.x + obj.w + player.radius;
             }
         }
     });
 
-    // Vertical Collision Execution
+    // Vertical Movement Checks
     player.grounded = false;
     player.y += player.vy;
+    pRect = getPlayerRect();
     
     mapObjects.forEach(obj => {
-        // Spring hidden spike traps if the player gets too close horizontally
-        if (obj.type === 'trap' && Math.abs(player.x - obj.x) < 50 && player.y > obj.y - 20) {
+        if (obj.type === 'trap' && Math.abs(player.x - obj.x) < 60 && player.y > obj.y - 20) {
             obj.triggered = true;
         }
 
         if (obj.type === 'solid' || obj.type === 'ice' || (obj.type === 'fake' && obj.visible)) {
-            if (checkCollision(player, obj)) {
+            if (checkCollision(pRect, obj)) {
                 if (player.vy > 0) { // Landing
-                    player.y = obj.y - player.h;
+                    player.y = obj.y - player.radius;
                     player.vy = 0;
+                    if (!player.grounded) { player.stretchX = 1.4; player.stretchY = 0.7; } // Impact squash
                     player.grounded = true;
-                    if (obj.type === 'fake') {
-                        // Tiny delay before it disappears to let them feel the betrayal
-                        setTimeout(() => { obj.visible = false; }, 80);
-                    }
-                } else if (player.vy < 0) { // Ceiling bonk
-                    player.y = obj.y + obj.h;
+                    if (obj.type === 'fake') setTimeout(() => { obj.visible = false; }, 80);
+                } else if (player.vy < 0) { // Bonk head
+                    player.y = obj.y + obj.h + player.radius;
                     player.vy = 0;
                 }
             }
         }
 
-        // Death objects
         if (obj.type === 'spike' || (obj.type === 'trap' && obj.triggered)) {
-            if (checkCollision(player, obj)) die();
+            if (checkCollision(pRect, obj)) die();
         }
 
-        // Win Flag Collision
-        if (obj.type === 'goal' && checkCollision(player, obj)) {
-            if (currentLevel < 100) {
-                currentLevel++;
-                startLevel();
-            } else {
-                alert(`CONGRATULATIONS! You beat all 100 levels with only ${deaths} deaths!`);
-                currentLevel = 1;
-                deaths = 0;
-                startLevel();
-            }
-        }
-    });
-
-    // Screen boundaries
-    if (player.x < 0) player.x = 0;
-    if (player.x > canvas.width - player.w) player.x = canvas.width - player.w;
-    if (player.y > canvas.height) die();
-}
-
-function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Draw Layout Objects
-    mapObjects.forEach(obj => {
-        if (obj.type === 'solid') {
-            ctx.fillStyle = "#555";
-            ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
-        } else if (obj.type === 'ice') {
-            ctx.fillStyle = "#00bfff"; // Light blue for slippery ice
-            ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
-        } else if (obj.type === 'fake' && obj.visible) {
-            ctx.fillStyle = "#555"; // Looks standard, hides its identity
-            ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
-        } else if (obj.type === 'spike') {
-            ctx.fillStyle = "#ff3333";
-            ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
-        } else if (obj.type === 'trap' && obj.triggered) {
-            ctx.fillStyle = "#ffaa00"; // Pops up as bright warning orange
-            ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
-        } else if (obj.type === 'goal') {
-            ctx.fillStyle = "#00ff66";
-            ctx.fillRect(obj.x, obj.y, obj.w, obj.h);
-        }
-    });
-
-    // Draw Player Box
-    ctx.fillStyle = "#00a2ff";
-    ctx.fillRect(player.x, player.y, player.w, player.h);
-}
-
-function gameLoop() {
-    update();
-    draw();
-    requestAnimationFrame(gameLoop);
-}
-
-// Initialise the first level layout
-startLevel();
-gameLoop();
-</script>
-</body>
-</html>
+        if (obj.type === 'goal' && checkCollision(pRect, obj)) {
+            if (currentLevel < 100) { currentLevel++; startLevel(); }
